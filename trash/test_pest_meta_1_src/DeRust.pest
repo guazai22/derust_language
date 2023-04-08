@@ -1,0 +1,274 @@
+// 此语法是针对 "写代码" 这个动作的.
+//
+// 能够通过此语法规则解析的, 就是合法的,
+// 而通不过此语法规则解析的, 就是不合法的.
+//
+// 合法不合法的原则是:
+// 1. 没有前置符就是语句的开始.
+
+// 本语言把换行默认为语句结束, 所以对 NEWLINE 的识别要小心.
+file = { SOI
+      ~ (
+          comment
+        | fn_def
+        // TODO: 其他模块
+	  | NEWLINE
+        )*
+      ~ EOI
+}
+
+// 函数定义
+fn_def = {
+   LT+ ~ "fn"
+   ~ fn_head
+   ~ block
+}
+
+// 关于函数名, 除了第一个词不能是 keyword 之外, 没有任何限制.
+// 允许以数字字母下划线开头, 允许是纯数字.
+fn_head = {
+      name_head
+   ~  (  "()"
+      |  (  ((LT* ~ "--")? ~ parameter_def)?
+         ~  (  (  (((LT* ~ "--")? ~ name_tail)+ ~ ((LT* ~ "--")? ~ parameter_def))*
+               ~  (((LT* ~ "--")? ~ name_tail)+ ~ "()")
+               )
+            |  (((LT* ~ "--")? ~ name_tail)+ ~ ((LT* ~ "--")? ~ parameter_def))+
+            )
+         )
+      |  ((LT* ~ "--")? ~ parameter_def)
+      )
+   ~  (  LT* ~ "->"
+	~  (  function_type
+	   |  "(" ~ (","? ~ function_type) ~ ("," ~ function_type)*
+	      ~ LT* ~ ")"
+	   )
+	)?
+}
+
+parameter_def = {
+      "("
+   ~  (  (LT* ~ ",")? ~ identifier
+	~  LT* ~ ":" ~ identifier_type
+      ~  (LT* ~ "=" ~ expr)?
+	)
+   ~  (  LT* ~ ","  ~ identifier
+	~  LT* ~ ":" ~ identifier_type
+	~  ("=" ~ expr)?
+	)*
+   ~  LT* ~ ")"
+}
+
+statement = {
+     comment
+   | declaration
+   | conditional_statement
+   | fn_def
+   /// TODO: 其他分支
+      /* | assignment | while_loop | conditional | (expr ~ semi) | comment   */
+}
+
+// 声明规则:
+// 强制要求在声明变量时初始化.
+// 可以省略类型, 让编译器自动推导, 但不能省略赋值.
+// 允许: let n = 3
+// 不允许: let n: i32
+declaration = {
+     ( "let" ~ "mut"? ~ identifier
+     ~ (LT * ~ ":" ~ identifier_type)?
+     ~ LT* ~ "=" ~ expr ~ ";"?
+     )
+   | ( "let" ~ "mut"? ~ identifier
+     ~ (LT * ~ ":" ~ identifier_type)?
+     ~ LT* ~ "=" ~ expr ~ ";"?
+     )
+}
+
+// 表达式:
+//
+expr = {
+     identifier
+   | number
+   /// TODO: 其他分支
+   | conditional_expr
+    /* bool_not | func_call | field_access | string_literal | bool_literal   */
+}
+
+// 条件表达式: 复杂语句要先于简单语句解析.
+conditional_expr = {
+      if_then_else_block_expr
+   |  if_block_expr
+}
+
+if_then_else_block_expr = {
+      if_then_return_block
+   ~  else_if_return_block*
+   ~  else_return_block
+}
+if_block_expr = {
+   !LT ~ "if" ~ "{"
+   ~  (LT* ~ "," ~ "(" ~ expr ~ LT* ~ ")" ~ then_return_block)+
+   ~  (LT* ~ "," ~ ("_" | "(_)") ~ then_return_block)
+   ~  LT* ~ "}"
+}
+if_then_return_block = {
+      !LT ~ "if" ~ "(" ~ expr ~ LT* ~ ")" ~ then_return_block
+}
+else_return_block = {
+	  LT*
+	~ ("ef" ~ "(_)" | "ef" ~ "_" | "else" ~ "if" ~ "(_)"
+	  | "else" ~ "if" ~ "_" | "else")
+	~ return_block
+}
+// else if 和 elseif 都可以
+else_if_return_block = { LT* ~ (("else" ~ "if" ) | "ef")
+	/* ~ !("(_)") */
+	~ "(" ~ expr ~ LT* ~ ")"
+	~ then_return_block }
+then_return_block = { LT* ~ "then"? ~ return_block }
+
+// 条件语句: 复杂语句要先于简单语句解析.
+conditional_statement = {
+      if_then_else_if_block
+   |  if_then_else_block
+   |  if_then_block
+   |  if_block
+}
+
+if_then_else_if_block = {
+      if_then_block
+   ~  else_if_block+
+   ~  else_block?
+}
+if_then_else_block = {
+      if_then_block
+   ~  else_block
+}
+if_then_block = {
+      LT+ ~ "if" ~ "(" ~ expr ~ LT* ~ ")" ~ then_block
+}
+if_block = {
+   LT+ ~ "if" ~ "{"
+   ~  (LT* ~ "," ~ "(" ~ expr ~ LT* ~ ")" ~ then_block)+
+   ~  (LT* ~ "," ~ "_" ~ then_block)?
+   ~  LT* ~ "}"
+}
+else_block = { LT* ~ "else" ~ block }
+// else if 和 elseif 都可以
+else_if_block = { LT* ~ ("else" ~ "if" ) ~ "(" ~ expr ~ LT* ~ ")" ~ then_block }
+then_block = { LT* ~ "then"? ~ block }
+
+/// TODO: 中文
+// 标识符规则:
+// 标识符由一个或者多个以空格分隔的词 组合而成: red apple , time 3, 小明的 书包.
+// 组成词的 unicode字符 可以是: LETTER NUMBER 下划线"_".
+//
+// head 表示 第一个 词, head不能是关键字, 不能是纯数字.
+// 错误例子: 123 个苹果, let james go. 123 是纯数字, let 是关键字.
+// 正确例子: 1个苹果, let_james_go.
+//
+// tail 代表 head以外的其他词, tails 代表head以外的其他词连在一起.
+// tail 没有 关键字 和 纯数字 的限制.
+// 所以有合法例子: 跑 3 圏, jame let john go.
+identifier = { !raw_number_or_underline ~ name_head ~ ((LT* ~ "--")? ~
+		name_tail)* ~ &(" "* ~ delimeter) }
+
+name_head = { !keyword ~ identifier_char+ }
+name_tail = { identifier_char+ }
+
+identifier_type = _{ name_head }
+
+identifier_char = _{ LETTER | NUMBER | "_" }
+
+/// TODO: 补全函数类型 < > ()
+/* function_type = { "mut"? ~ identifier | "()" } */
+function_type = _{ identifier }
+
+// 数字:
+// 以0为开头的两位或者两位以上数字是不合法的.
+// 错误例子: 001
+// 允许数字中有下划线: 1_223_223
+// 或者允许数字中有空格: 1 223 223
+// 但是数字中间下划线和空格只允许有一种, 不能混用.
+// 123_223 123 这是不合法的.
+// 而且必须分割好, 允许每三位或者四位分割, 乱分割是不合法的.
+// 合法: 123_223 | 223 223 | 1_223 | 1 223 | 1 2233 | 1_2233
+// 不合法: 1_22 | 1_22222 | 1 22 | 1 2222
+number = @{
+      ("0" | (nonzero ~ digit{0,3} ~ ("_" ~ digit{4})*)) ~ &(" "* ~ delimeter)
+   |  ("0" | (nonzero ~ digit{0,3} ~ (" " ~ digit{4})*)) ~ &(" "* ~ delimeter)
+   |  ("0" | (nonzero ~ digit{0,2} ~ ("_" ~ digit{3})*)) ~ &(" "* ~ delimeter)
+   |  ("0" | (nonzero ~ digit{0,2} ~ (" " ~ digit{3})*)) ~ &(" "* ~ delimeter)
+   |  ("0" | (nonzero ~ digit*)) ~ &(" "* ~ delimeter)
+}
+
+// 对格式要示不严格的数字
+raw_number_or_underline = @{ (digit | "_" ) ~ (" " | "_" | digit)*
+   ~ &(delimeter) }
+
+digit = _{ "0" | nonzero }
+nonzero = _{ '1'..'9' }
+
+// 分割符
+delimeter = _{ "," | "." | ";" | ":" | "(" | ")" | "{" | "}" | "[" | "]" | "\n"
+   | "=" | "++" | "+" | (!("--") ~ "-") | "**" | "*" | "//" | "/" | EOI
+}
+
+/// TODO: 整理关键字
+keyword = @{
+   ("abstract" | "as" | "become" | "break" | "byte" | "class" | "clear" |
+   "const" | "continue" | "do" | "else" | "enum" | "eval" | "export" |
+   "extern" | "false" | "final" | "fn" | "for" | "if" | "impl" | "import" |
+   "in" | "let" | "loop" | "match" | "mod" | "move" | "mut" | "of" |
+   "out" | "pub" | "raw" | "ref" | "return" | "self" | "static" |
+   "struct" | "super" | "trait" | "true" | "typeof" | "type" | "unsafe" |
+   "use" | "where" | "while" | "yield") ~ &(WHITESPACE | delimeter)
+}
+
+alpha = _{ 'a'..'z' | 'A'..'Z' }
+alphanumeric = _{ alpha | '0'..'9' }
+
+// 行注释和块注释 都是以换行符结尾,
+// 不允许这样:
+// abc /* comment */ edf
+// abc /* comment */
+
+// 只有行注释 "//" , 没有块注释 "/* */" .
+comment = {
+      NEWLINE+ ~ "//" ~ (!NEWLINE ~ ANY)*
+   |  "//" ~ (!NEWLINE ~ ANY)*
+}
+
+// grammar 6
+// block 必须跟在其他东西的后面, 不能单独存在.
+block = {
+        !LT ~ "{"
+      ~ ( (LT+ ~ "DO_SOMETHING")
+        | (LT+ ~ statement)*
+        )
+      ~ LT+ ~ "}"
+   |  !LT ~ "{" ~ (statement | "do_nothing" | "DO_SOMETHING") ~ LT* ~ "}"
+}
+
+return_block = {
+      !LT ~ "{"
+      ~  (LT+ ~ statement)*
+      ~  ( (LT+ ~ return_statement)
+         | (LT+ ~ "DO_SOMETHING")
+         )
+      ~  LT+ ~ "}"
+   |  !LT ~ "{" ~ (return_statement | "DO_SOMETHING") ~ LT* ~ "}"
+}
+
+// return_statement 不属于 statement.
+/// TODO: if... return... for... return... match... return...
+return_statement = { "return" ~ expr | ";" ~ expr }
+
+// 考虑到行尾可以有注释, 所以把行注释归结为 line_terminator.
+LT = _{  NEWLINE | "//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+
+// 制表符
+WHITESPACE = _{
+     " "
+   | "\t"
+}

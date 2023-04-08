@@ -1,0 +1,21 @@
+// 声明
+fn f() {
+	let mut n: i32 = 8;
+	let mut n: i32 = 8
+	let mut n = 8
+	let n = 8
+	let n: i32 = 8
+	let n = 8;
+
+	let mut n
+		: i32 = 8
+	let mut n
+		: i32
+			= 8
+	let mut n: i32
+		= 8
+
+	// 错误
+	// let n: mut i32 = 8
+	// let mut n: i32
+}

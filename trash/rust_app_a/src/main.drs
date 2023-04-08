@@ -1,0 +1,11 @@
+fn main () -> i32 {
+    for i .in iter { 123 }
+    for (i) .in iter abc () { 123 }
+    mark a .for (i) .in (iter) { 523 }
+    mark b .loop { 123 }
+    while true { 123 }
+    mark c .while true { 123 }
+    mark a .loop (top 5) .times { 123 }
+    loop. 5 .times { 123 }
+    mark a .loop 5 .times { 123 }
+}

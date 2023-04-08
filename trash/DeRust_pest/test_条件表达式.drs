@@ -1,0 +1,70 @@
+// 条件表达式
+fn f() {
+	let n: i32
+	= if (1) then {
+		; 3
+	} else if (3) {
+		return 4
+	} ef _ {
+		; 4
+	}
+
+	let n: i32
+	= if (1) then {
+		; 3
+	} ef (3) {
+		return 4
+	} ef (_) {
+		; 5
+	}
+	
+	let n = if (1) then {
+		; 2
+	} else {
+		; i32
+	}
+
+	let n = if (1) then {
+		; 2
+	} ef _ {
+		; i32
+	}
+
+	let n = if (1) then {
+		; 2
+	} ef (_) {
+		; i32
+	}
+
+	let n = if (1) then {
+		; 2
+	} else if (_) {
+		; i32
+	}
+
+	let n = if {
+		, (1) then {
+			; 1
+		}
+		, (2) then {
+			; 2
+		}
+		, _ {
+			; 3 
+		}
+	}
+
+	let n = if {
+		, (1) then {
+			; 1
+		}
+		, (2) then {
+			; 2
+		}
+		, (_) {
+			; 3 
+		}
+	}
+
+	let n = 3;
+}

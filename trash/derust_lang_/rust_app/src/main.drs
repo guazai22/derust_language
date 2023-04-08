@@ -1,0 +1,8 @@
+fn main () {
+    let _number a3 = 3;
+    let s = "你好";
+    let mut s = s.to string();
+    s.push str(" jack.");
+    println("{}", s);
+    loop 3 .times {}
+}
