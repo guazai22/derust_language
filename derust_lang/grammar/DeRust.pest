@@ -34,8 +34,8 @@ branch_block = { match_block | if_block }
     match_block = { KEYWORD_if ~ DOT? ~ expression ~ DOT ~ KEYWORD_is ~ match_branches }
         match_branches = { "{" ~ match_branch+ ~ match_else_branch? ~ MARK_branch? ~ "}" }
             // TODO: match 的参数, 是不是有限制. pattern?
-            match_branch = { MARK_branch? ~ expression ~ block }
-            match_else_branch = { MARK_branch? ~ (KEYWORD_else | "_") ~ block }
+            match_branch = { MARK_branch? ~ expression ~ "=>" ~ block }
+            match_else_branch = { MARK_branch? ~ (KEYWORD_else | "_") ~ "=>" ~ block }
 
 loop_block = { loop_for_block | loop_while_block | loop_times_block | loop_repeat_block }
 // TODO: pattern?
@@ -49,30 +49,32 @@ loop_block = { loop_for_block | loop_while_block | loop_times_block | loop_repea
 
 statement = {
     function_call_statement
-  | dot_chain_statement
+  | chain_statement
   | let_statement
+  | mut_assignment
   | branch_block
   | loop_block
   | continue_statement
   | break_statement
   | return_statement
-  | expr_statament
+  | expr_statement
   /* | if_statement */
   // TODO
 }
 
-expr_statament = { expression ~ ";" }
+expr_statement = { expression ~ ";" }
 function_call_statement = { function_call_expr ~ ";" }
 // TODO: pattern?
 let_statement = { keyword_let ~ DOT? ~ (type_expr | identifier) ~ assignment? ~ ";" }
     assignment = { "=" ~ expression }
+mut_assignment = { identifier ~ assignment ~ ";" }
 return_statement = { KEYWORD_return ~ DOT? ~ expression? ~ ";" }
 break_statement = { loop_mark? ~ KEYWORD_break ~ DOT? ~ expression? ~ ";" }
 continue_statement = { loop_mark? ~ KEYWORD_continue ~ ";" }
-dot_chain_statement = { dot_chain_expr ~ ";" }
+chain_statement = { chain_expr ~ ";" }
 
-expression = { dot_chain_expr | expression_except_chain
-    /* | binary_expr */
+expression = { binary_expr | expression_except_binary }
+expression_except_binary = { chain_expr | expression_except_chain
 }
     expression_except_chain = {
           brackt_expr
@@ -85,6 +87,7 @@ expression = { dot_chain_expr | expression_except_chain
         | function_call_expr
         | literal_expr
         | identifier /* | method_call_expr */
+        /* | binary_expr */
         /* | unary_expr // 一元操作 */
         /* | cast_expr  // foo as f64 */
         /* | let_expr */
@@ -114,8 +117,8 @@ expression = { dot_chain_expr | expression_except_chain
 
 brackt_expr = { "(" ~ expression ~ ")" }
 tuple_expr = { "(" ~ ","? ~ expression ~ ("," ~ expression)+ ~ ","? ~ ")" }
-dot_chain_expr = { expression_except_chain ~ "." ~ expression }
-binary_expr = { expression ~ mark_binary ~ expression }
+chain_expr = { expression_except_chain ~ "." ~ expression }
+binary_expr = { expression_except_binary ~ mark_binary ~ expression }
 
 function_call_expr = {
     (identifier ~ ("(" ~ (","? ~ expression ~ ("," ~ expression)* ~ ","?)? ~ ")" ~ identifier_atomic+)+
@@ -123,38 +126,41 @@ function_call_expr = {
     | (identifier ~ "(" ~ (","? ~ expression ~ ("," ~ expression)* ~ ","?)? ~ ")")
 }
 
-literal_expr          =  { bool_literal | measure_with_number | number_literal | string_literal }
-    bool_literal          =  { "true" | "false" }
-    string_literal        =  { triple_quote_string | quote_string | raw_string }
-        quote_string          = ${ PUSH("\"") ~ inner_string ~ POP }
-        raw_string            = ${ "r" ~ PUSH("#"*) ~ "\"" ~ inner_string ~ "\"" ~ POP }
-        triple_quote_string   = ${ PUSH("\"\"\"") ~ NEWLINE ~ inner_string ~ POP }
-            inner_string          = ${ (!(PEEK) ~ ANY)* }
-    number_literal        =  { number_with_underline | number_with_space | number_pure }
+literal_expr = { bool_literal | measure_with_number | number_literal | string_literal }
+    bool_literal   =  { "true" | "false" }
+    string_literal =  { triple_quote_string | quote_string | raw_string }
+        quote_string        = ${ PUSH("\"") ~ inner_string ~ POP }
+        raw_string          = ${ "r" ~ PUSH("#"*) ~ "\"" ~ inner_string ~ "\"" ~ POP }
+        triple_quote_string = ${ PUSH("\"\"\"") ~ NEWLINE ~ inner_string ~ POP }
+            inner_string = ${ (!(PEEK) ~ ANY)* }
+    number_literal =  { number_with_underline | number_with_space | number_pure }
         number_with_underline = @{
             (NUMBER+ ~ "_"{1, 3})+ ~ (NUMBER+)?
           | ("_"{1, 3} ~ NUMBER+)+ ~ "_"{, 3}
         }
         number_with_space     = @{ NUMBER+ ~ (" "{1, 3} ~ NUMBER+)+ }
         number_pure           = @{ NUMBER+ }
-    measure_with_number   = ${ number_literal ~ " "{,3} ~ LETTER+ }
+    measure_with_number = ${ number_literal ~ " "{,3} ~ LETTER+ }
 
-array_expr   = { array_repeat | array_some | array_none }
+array_expr = { array_repeat | array_some | array_none }
     array_none   = { "[" ~ "]" }
     array_some   = { "[" ~ ","? ~ expression ~ ("," ~ expression)* ~ ","? ~ "]" }
     array_repeat = { "[" ~ expression ~ ";" ~ number_literal ~ "]" }
 array_index_expr = { identifier ~ "[" ~ expression ~ "]" }
 
-type_expr   = { identifier ~ ":" ~ type_name }
-    type_name               = {
-        identifier /* /* | */ // TODO 其他enum: (<i32>,<i32>) [<i32>] */
-      // TODO: type tuple_type or_type ...
+type_expr = { identifier ~ ":" ~ type_name }
+    type_name = {
+          array_type
+        | identifier
+        // | */ // TODO 其他enum: (<i32>,<i32>) [<i32>] */
+        // TODO: type tuple_type or_type ...
     }
+    array_type = { "[" ~ type_name ~ "]"}
 
 lambda_expr = { KEYWORD_lambda_start ~ DOT? ~ lambda_head ~ block }
     lambda_head = { "(" ~ (type_expr ~ ","?)* ~ ")" }
 
-comment       = _{ block_comment | line_comment }
+comment = _{ block_comment | line_comment }
     line_comment  = _{ ("//" ~ !("/" | "!") ~ (!NEWLINE ~ ANY)*) }
     block_comment = _{ "/*" ~ (block_comment | !"*/" ~ ANY)* ~ "*/" }
 
@@ -171,7 +177,7 @@ KEYWORD = @{
   | "do"
   | "else" | "enum" | "eval" | "export" | "extern" 
   | "false" | "final" | "fn" | "for"
-  | "if" | "impl" | "import" | "in" 
+  | "if" | "impl" | "import" | "in" | "is"
   | "let" | "loop" 
   | "main" | "match" | "mod" | "move" | "mut"
   | "of" | "out" | "pub" | "raw" | "ref" | "return" 
